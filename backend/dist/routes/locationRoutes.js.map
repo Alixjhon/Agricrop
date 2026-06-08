@@ -1,0 +1,1 @@
+{"version":3,"file":"locationRoutes.js","sourceRoot":"","sources":["../../src/routes/locationRoutes.ts"],"names":[],"mappings":";;;;;;AAAA,sDAA8B;AAC9B,0EAAwG;AAExG,MAAM,MAAM,GAAG,iBAAO,CAAC,MAAM,EAAE,CAAC;AAMb,gCAAc;AAJjC,MAAM,CAAC,GAAG,CAAC,sBAAsB,EAAE,sCAAiB,CAAC,CAAC;AACtD,MAAM,CAAC,GAAG,CAAC,oBAAoB,EAAE,qCAAgB,CAAC,CAAC;AACnD,MAAM,CAAC,GAAG,CAAC,mBAAmB,EAAE,mCAAc,CAAC,CAAC"}

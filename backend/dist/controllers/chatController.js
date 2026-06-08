@@ -1,0 +1,69 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.askQuestion = exports.getChatHistory = void 0;
+const db_1 = __importDefault(require("../models/db"));
+const chatService_1 = require("../services/chatService");
+const getChatHistory = async (req, res) => {
+    try {
+        const convId = req.params.convId;
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ success: false, error: 'User not authenticated' });
+        }
+        const result = await db_1.default.query(`SELECT role, content
+       FROM "chatMessages"
+       WHERE "conversationId" = $1 AND "userId" = $2
+       ORDER BY "createdAt" ASC`, [convId, userId]);
+        return res.json({ success: true, messages: result.rows });
+    }
+    catch (err) {
+        console.error('Error fetching chat history:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch chat history' });
+    }
+};
+exports.getChatHistory = getChatHistory;
+const askQuestion = async (req, res) => {
+    try {
+        const { message, conversationId } = req.body;
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'User not authenticated' });
+        }
+        if (!message || typeof message !== 'string' || message.trim().length === 0) {
+            return res.status(400).json({ error: 'Message is required' });
+        }
+        const cleanMessage = message.trim();
+        // Generate AI response using your farming service
+        const aiReply = await (0, chatService_1.generateFarmingAdvice)(cleanMessage);
+        let finalId = conversationId;
+        if (!finalId) {
+            // Create new conversation with gen_random_uuid()
+            const newConv = await db_1.default.query(`INSERT INTO conversations ("userId", "conversationId", title, topic, "messageCount", "lastMessageAt")
+         VALUES ($1, gen_random_uuid(), $2, 'General', 0, NOW())
+         RETURNING "conversationId"`, [userId, cleanMessage.substring(0, 30) + '...']);
+            finalId = newConv.rows[0].conversationId;
+        }
+        // Insert user message
+        await db_1.default.query(`INSERT INTO "chatMessages" ("userId", "conversationId", "role", "content")
+       VALUES ($1, $2, 'user', $3)`, [userId, finalId, cleanMessage]);
+        // Insert assistant response
+        await db_1.default.query(`INSERT INTO "chatMessages" ("userId", "conversationId", "role", "content", "fullResponse")
+       VALUES ($1, $2, 'assistant', $3, $4)`, [userId, finalId, aiReply, JSON.stringify({ reply: aiReply })]);
+        // Update conversation message count
+        await db_1.default.query(`UPDATE conversations
+       SET "messageCount" = "messageCount" + 2,
+           "lastMessageAt" = NOW()
+       WHERE "conversationId" = $1`, [finalId]);
+        return res.json({ reply: aiReply, conversationId: finalId });
+    }
+    catch (error) {
+        console.error('Error in askQuestion:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: `Failed to generate response: ${errorMessage}` });
+    }
+};
+exports.askQuestion = askQuestion;
+//# sourceMappingURL=chatController.js.map

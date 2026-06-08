@@ -1,0 +1,68 @@
+version: '3.8'
+
+# Production Docker Compose configuration
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # Frontend - Nginx serving React app
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        - NODE_ENV=production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ssl:/etc/nginx/ssl:ro  # Mount SSL certificates
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - cropwise-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Backend - Node.js API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    env_file:
+      - backend/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=5001
+    restart: always
+    networks:
+      - cropwise-network
+    volumes:
+      - backend-uploads:/app/uploads
+      - backend-logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+        reservations:
+          cpus: '0.50'
+          memory: 256M
+
+# Volumes for persistent data
+volumes:
+  backend-uploads:
+    driver: local
+  backend-logs:
+    driver: local
+
+# Network configuration
+networks:
+  cropwise-network:
+    driver: bridge

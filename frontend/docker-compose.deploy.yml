@@ -1,0 +1,35 @@
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE}
+    pull_policy: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - cropwise-network
+
+  backend:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE}
+    pull_policy: always
+    ports:
+      - "5001:5001"
+    env_file:
+      - backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+    restart: unless-stopped
+    networks:
+      - cropwise-network
+    volumes:
+      - backend-uploads:/app/uploads
+
+volumes:
+  backend-uploads:
+    driver: local
+
+networks:
+  cropwise-network:
+    driver: bridge

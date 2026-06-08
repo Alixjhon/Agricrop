@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+node_modules
+backend/node_modules
+dist
+backend/dist
+cropwise-ai
+backend/data
+*.log
+.env
+backend/.env

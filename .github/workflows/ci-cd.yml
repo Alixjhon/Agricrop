@@ -1,0 +1,196 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: cropwise-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20
+  REGISTRY: ghcr.io
+  FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/cropwise-frontend
+  BACKEND_IMAGE_NAME: ${{ github.repository_owner }}/cropwise-backend
+
+jobs:
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Lint frontend and backend source
+        run: npm run lint
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build backend
+        run: npm run build
+        working-directory: backend
+
+  docker:
+    name: Build and Publish Images
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      frontend_image: ${{ steps.image-vars.outputs.frontend_image }}
+      backend_image: ${{ steps.image-vars.outputs.backend_image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image variables
+        id: image-vars
+        run: |
+          echo "frontend_image=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata for frontend
+        id: frontend-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Docker metadata for backend
+        id: backend-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: true
+          tags: ${{ steps.frontend-meta.outputs.tags }}
+          labels: ${{ steps.frontend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: true
+          tags: ${{ steps.backend-meta.outputs.tags }}
+          labels: ${{ steps.backend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Skip deployment when server secrets are missing
+        if: ${{ !secrets.DEPLOY_HOST || !secrets.DEPLOY_USER || !secrets.DEPLOY_SSH_KEY || !secrets.DEPLOY_PATH || !secrets.DEPLOY_GHCR_USERNAME || !secrets.DEPLOY_GHCR_TOKEN }}
+        run: |
+          echo "Deployment secrets are not fully configured."
+          echo "Set DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH, DEPLOY_GHCR_USERNAME, and DEPLOY_GHCR_TOKEN to enable automatic deployment."
+
+      - name: Start SSH agent
+        if: ${{ secrets.DEPLOY_HOST && secrets.DEPLOY_USER && secrets.DEPLOY_SSH_KEY && secrets.DEPLOY_PATH && secrets.DEPLOY_GHCR_USERNAME && secrets.DEPLOY_GHCR_TOKEN }}
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add deployment host
+        if: ${{ secrets.DEPLOY_HOST && secrets.DEPLOY_USER && secrets.DEPLOY_SSH_KEY && secrets.DEPLOY_PATH && secrets.DEPLOY_GHCR_USERNAME && secrets.DEPLOY_GHCR_TOKEN }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync deployment assets
+        if: ${{ secrets.DEPLOY_HOST && secrets.DEPLOY_USER && secrets.DEPLOY_SSH_KEY && secrets.DEPLOY_PATH && secrets.DEPLOY_GHCR_USERNAME && secrets.DEPLOY_GHCR_TOKEN }}
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            --exclude "backend/node_modules" \
+            --exclude "dist" \
+            --exclude "backend/dist" \
+            --exclude "cropwise-ai" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: Deploy release
+        if: ${{ secrets.DEPLOY_HOST && secrets.DEPLOY_USER && secrets.DEPLOY_SSH_KEY && secrets.DEPLOY_PATH && secrets.DEPLOY_GHCR_USERNAME && secrets.DEPLOY_GHCR_TOKEN }}
+        env:
+          FRONTEND_IMAGE: ${{ needs.docker.outputs.frontend_image }}
+          BACKEND_IMAGE: ${{ needs.docker.outputs.backend_image }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_GHCR_USERNAME: ${{ secrets.DEPLOY_GHCR_USERNAME }}
+          DEPLOY_GHCR_TOKEN: ${{ secrets.DEPLOY_GHCR_TOKEN }}
+        run: |
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "
+            set -e
+            cd '${DEPLOY_PATH}'
+            export FRONTEND_IMAGE='${FRONTEND_IMAGE}'
+            export BACKEND_IMAGE='${BACKEND_IMAGE}'
+            export DEPLOY_GHCR_USERNAME='${DEPLOY_GHCR_USERNAME}'
+            export DEPLOY_GHCR_TOKEN='${DEPLOY_GHCR_TOKEN}'
+            chmod +x scripts/deploy.sh scripts/health-check.sh
+            ./scripts/deploy.sh release
+          "

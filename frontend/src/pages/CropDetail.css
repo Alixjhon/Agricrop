@@ -1,0 +1,112 @@
+/* CropDetail page styles */
+
+/* Smooth transitions for tab switching */
+.crop-detail-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Step accordion animations */
+.step-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+.step-content.expanded {
+  max-height: 500px;
+  opacity: 1;
+}
+
+/* Store card hover effect */
+.store-card {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.store-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Tab button states */
+.tab-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-button::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background-color: hsl(var(--primary));
+  transition: all 0.3s ease-in-out;
+  transform: translateX(-50%);
+}
+
+.tab-button.active::after {
+  width: 80%;
+}
+
+/* Step number badge */
+.step-number {
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%);
+  color: hsl(var(--primary-foreground));
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Loading spinner */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Store type badge */
+.store-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background-color: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .store-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .store-actions button {
+    width: 100%;
+  }
+}
