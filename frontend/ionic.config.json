@@ -1,0 +1,13 @@
+{
+  "name": "Cropwise",
+  "integrations": {
+    "capacitor": {
+      "appId": "com.cropwise.app",
+      "server": {
+        "url": null,
+        "cleartext": true
+      }
+    }
+  },
+  "type": "react"
+}
