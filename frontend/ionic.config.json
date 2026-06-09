@@ -1,8 +1,8 @@
 {
-  "name": "Cropwise",
+  "name": "AgriCrop",
   "integrations": {
     "capacitor": {
-      "appId": "com.cropwise.app",
+      "appId": "com.agricrop.app",
       "server": {
         "url": null,
         "cleartext": true
