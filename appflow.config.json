@@ -1,7 +1,7 @@
 {
   "apps": [
     {
-      "appId": "com.cropwise.app",
+      "appId": "6f3c017b",
       "name": "Cropwise",
       "type": "capacitor",
       "capacitor": {
