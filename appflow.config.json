@@ -1,0 +1,18 @@
+{
+  "apps": {
+    "android": {
+      "capacitor": {
+        "buildOptions": {
+          "directory": "frontend"
+        }
+      }
+    },
+    "ios": {
+      "capacitor": {
+        "buildOptions": {
+          "directory": "frontend"
+        }
+      }
+    }
+  }
+}
