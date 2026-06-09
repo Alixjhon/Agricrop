@@ -1,4 +1,4 @@
-package com.cropwise.app;
+package com.agricrop.app;
 
 import com.getcapacitor.BridgeActivity;
 

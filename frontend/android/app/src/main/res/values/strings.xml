@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Cropwise</string>
-    <string name="title_activity_main">Cropwise</string>
-    <string name="package_name">com.cropwise.app</string>
-    <string name="custom_url_scheme">com.cropwise.app</string>
+    <string name="app_name">AgriCrop</string>
+    <string name="title_activity_main">AgriCrop</string>
+    <string name="package_name">com.agricrop.app</string>
+    <string name="custom_url_scheme">com.agricrop.app</string>
 </resources>
