@@ -6,7 +6,8 @@
       "type": "capacitor",
       "capacitor": {
         "buildOptions": {
-          "directory": "frontend"
+          "directory": "frontend",
+          "webBuildCommand": "npm run build"
         }
       }
     }

@@ -5,5 +5,9 @@
   "description": "Root package.json for Ionic Appflow — uses npm workspaces to install the Capacitor project in /frontend",
   "workspaces": [
     "frontend"
-  ]
+  ],
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "postinstall": "cd frontend && npm install"
+  }
 }
