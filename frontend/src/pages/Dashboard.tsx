@@ -31,6 +31,8 @@ import {
   FileText,
   History,
   Settings,
+  MapPinned,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { api, type HistoryRecord } from "@/lib/api";
 import { getCurrentDeviceLocation } from "@/lib/location";
+import type { HarvestSummary, Plantation } from "@/types/planting";
 
 interface WeatherData {
   temp: number;
@@ -86,6 +89,28 @@ type WeatherSource =
   | { type: "coords"; lat: number; lon: number; accuracy?: number }
   | { type: "city"; city: string }
   | null;
+
+function dashboardNumber(value: string | number | null | undefined): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function dashboardMoney(value: string | number | null | undefined): string {
+  return `₱${dashboardNumber(value).toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function hasDashboardAnalytics(summary: HarvestSummary | null): boolean {
+  if (!summary) return false;
+  const status = String(summary.status ?? "").toLowerCase();
+  return Boolean(
+    summary.profit ||
+      dashboardNumber(summary.harvest?.actual_yield) > 0 ||
+      status === "archived" ||
+      status === "completed",
+  );
+}
 
 interface ExtendedHistoryRecord extends HistoryRecord {
   conversationId?: string;
@@ -382,10 +407,15 @@ export default function Dashboard() {
     const saved = localStorage.getItem("user");
     return saved ? JSON.parse(saved) : {};
   });
+  const [plantation, setPlantation] = useState<Plantation | null>(null);
+  const [plantationSummary, setPlantationSummary] =
+    useState<HarvestSummary | null>(null);
+  const [plantationLoading, setPlantationLoading] = useState(true);
   const inFlightRef = useRef({
     stats: false,
     activity: false,
     weather: false,
+    plantation: false,
   });
   const lastRefreshRef = useRef({
     stats: 0,
@@ -394,10 +424,57 @@ export default function Dashboard() {
   });
   const weatherSourceRef = useRef<WeatherSource>(null);
 
+  // Track whether the plantation has analytics so we can persist it across
+  // remounts and skip the plantation fetch on the dashboard if the user has
+  // already loaded the analytics once.
+  const [plantationHasAnalytics, setPlantationHasAnalytics] = useState<boolean>(
+    () => {
+      try {
+        return localStorage.getItem("dashboard:plantationHasAnalytics") === "1";
+      } catch {
+        return false;
+      }
+    },
+  );
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // If we already have analytics cached, mark the loader as done immediately
+  // so the plantation card is not stuck in its loading skeleton on remount.
+  useEffect(() => {
+    if (plantationHasAnalytics) {
+      setPlantationLoading(false);
+    }
+  }, [plantationHasAnalytics]);
+
+  // Whenever the freshly fetched summary is evaluated, persist the analytics
+  // flag and the actual data so the next dashboard mount can render the
+  // card without re-fetching.
+  useEffect(() => {
+    const next = hasDashboardAnalytics(plantationSummary);
+    setPlantationHasAnalytics((prev) => {
+      if (prev === next) return prev;
+      try {
+        localStorage.setItem(
+          "dashboard:plantationHasAnalytics",
+          next ? "1" : "0",
+        );
+        if (next) {
+          localStorage.setItem(
+            "dashboard:plantationSummary",
+            JSON.stringify(plantationSummary),
+          );
+        }
+      } catch {
+        /* ignore storage errors */
+      }
+      return next;
+    });
+  }, [plantationSummary]);
+
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -684,6 +761,67 @@ export default function Dashboard() {
     }
   }, []);
 
+  const fetchActivePlantation = useCallback(async (options?: { silent?: boolean }) => {
+    if (inFlightRef.current.plantation) return;
+    inFlightRef.current.plantation = true;
+    try {
+      const response = await api.listPlantations();
+      const list = ((response.plantations || []) as unknown as Plantation[]).filter(
+        (p) => p && p.farm,
+      );
+      const active =
+        list.find((p) => String(p.status).toLowerCase() === "active") ?? list[0] ?? null;
+      if (active && active.farm) {
+        try {
+          const detail = await api.getPlantation(String(active.id));
+          const detailPlantation = detail.plantation as unknown as Plantation;
+          const merged: Plantation = {
+            ...active,
+            ...(detailPlantation ?? {}),
+            farm: detailPlantation?.farm ?? active.farm,
+            costs: detailPlantation?.costs ?? active.costs,
+            calendarEvents:
+              detailPlantation?.calendarEvents ?? active.calendarEvents,
+            next_activity:
+              detailPlantation?.next_activity ?? active.next_activity,
+          };
+          setPlantation(merged);
+          try {
+            const summary = await api.getHarvestSummary(String(merged.id));
+            setPlantationSummary(summary.summary);
+          } catch (summaryError) {
+            console.warn("Falling back without plantation analytics", summaryError);
+            setPlantationSummary(null);
+          }
+        } catch (detailError) {
+          console.warn("Falling back to list row for plantation", detailError);
+          setPlantation(active);
+          try {
+            const summary = await api.getHarvestSummary(String(active.id));
+            setPlantationSummary(summary.summary);
+          } catch (summaryError) {
+            console.warn("Falling back without plantation analytics", summaryError);
+            setPlantationSummary(null);
+          }
+        }
+      } else {
+        setPlantation(null);
+        setPlantationSummary(null);
+      }
+    } catch (error) {
+      console.error("Failed to load plantation:", error);
+      if (!options?.silent) {
+        setPlantation(null);
+        setPlantationSummary(null);
+      }
+    } finally {
+      inFlightRef.current.plantation = false;
+      if (!options?.silent) {
+        setPlantationLoading(false);
+      }
+    }
+  }, []);
+
   const refreshWeatherSilently = useCallback(async () => {
     if (inFlightRef.current.weather || !weatherSourceRef.current) return;
 
@@ -707,8 +845,36 @@ export default function Dashboard() {
     void requestUserLocationAndWeather();
     void fetchStats();
     void fetchRecentActivity();
+    // Only fetch the plantation on mount when we don't already have analytics
+    // (i.e. don't refetch/refresh plantation data on the dashboard once analytics exist).
+    if (!plantationHasAnalytics) {
+      void fetchActivePlantation();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount - remove dependencies to prevent infinite loop
+
+  // Refresh plantation when the user returns to the dashboard or when a new
+  // plantation was just created (e.g. on the crop detail screen).
+  // Skip the re-fetch entirely once analytics are already available, so the
+  // plantation data is not repeatedly fetched on the dashboard view.
+  useEffect(() => {
+    if (plantationHasAnalytics) return;
+
+    const handleRefreshPlantation = () => {
+      inFlightRef.current.plantation = false;
+      void fetchActivePlantation({ silent: true });
+    };
+
+    window.addEventListener("focus", handleRefreshPlantation);
+    document.addEventListener("visibilitychange", handleRefreshPlantation);
+    window.addEventListener("plantation:created", handleRefreshPlantation);
+
+    return () => {
+      window.removeEventListener("focus", handleRefreshPlantation);
+      document.removeEventListener("visibilitychange", handleRefreshPlantation);
+      window.removeEventListener("plantation:created", handleRefreshPlantation);
+    };
+  }, [fetchActivePlantation, plantationHasAnalytics]);
 
   useEffect(() => {
     let timeoutId: number | undefined;
@@ -849,6 +1015,10 @@ export default function Dashboard() {
     },
   ];
 
+  const goToFarmHistory = useCallback(() => {
+    navigate("/farm-analytics-comparison");
+  }, [navigate]);
+
   const quickActions = [
     {
       label: "Enter Soil Data",
@@ -877,6 +1047,13 @@ export default function Dashboard() {
       icon: MessageCircle,
       gradient: "from-violet-500 to-purple-600",
       path: "/chat",
+    },
+    {
+      label: "Farm Analytics Comparison",
+      description: "Compare cycles side by side",
+      icon: BarChart3,
+      gradient: "from-pink-500 to-rose-600",
+      path: "__farm_history__",
     },
     {
       label: "View History",
@@ -1414,7 +1591,11 @@ export default function Dashboard() {
                 >
                   <Card
                     className="min-w-[180px] cursor-pointer transition-all duration-300 hover:shadow-xl group"
-                    onClick={() => navigate(action.path)}
+                    onClick={() =>
+                      action.path === "__farm_history__"
+                        ? goToFarmHistory()
+                        : navigate(action.path)
+                    }
                   >
                     <CardContent className="flex flex-col items-center justify-center p-4">
                       <div className={`mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${action.gradient} shadow-lg group-hover:shadow-xl transition-all`}>
@@ -1432,6 +1613,97 @@ export default function Dashboard() {
               );
             })}
           </div>
+        </section>
+
+        {/* My Plantation quick action */}
+        <section className="mt-6">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="mb-4 flex items-center justify-between"
+          >
+            <h2 className="text-lg font-semibold text-foreground">My Plantation</h2>
+            {plantationHasAnalytics && (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Analytics ready
+              </span>
+            )}
+          </motion.div>
+
+          {plantationLoading ? (
+            <div className="h-32 animate-pulse rounded-2xl bg-white" />
+          ) : (
+            <Card
+              className={[
+                "overflow-hidden border-0 shadow-md transition-all",
+                plantationHasAnalytics
+                  ? "group cursor-pointer hover:shadow-xl"
+                  : "cursor-default",
+              ].join(" ")}
+              onClick={
+                plantationHasAnalytics ? () => navigate("/plantation") : undefined
+              }
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md">
+                    {plantationHasAnalytics ? (
+                      <TrendingUp className="h-7 w-7 text-white" />
+                    ) : (
+                      <MapPinned className="h-7 w-7 text-white" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-semibold text-foreground">
+                      {plantation?.crop_name ?? "No active plantation yet"}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {plantation
+                        ? `${plantation.farm?.farm_name ?? "Your farm"} • ${plantation.calendarEvents?.filter((event) => String(event.status).toLowerCase() === "done").length ?? 0}/${plantation.calendarEvents?.length ?? 0} activities done`
+                        : "Track progress, costs, and weather-aware activities on its own page."}
+                    </p>
+                  </div>
+                  {plantationHasAnalytics && (
+                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                  )}
+                </div>
+                {plantationHasAnalytics && plantationSummary && (
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className="rounded-xl bg-emerald-50 p-2">
+                      <p className="text-[10px] font-medium uppercase text-emerald-700">
+                        Yield
+                      </p>
+                      <p className="truncate text-xs font-bold text-emerald-950">
+                        {plantationSummary.harvest
+                          ? `${dashboardNumber(plantationSummary.harvest.actual_yield).toLocaleString()} ${plantationSummary.harvest.yield_unit}`
+                          : "Done"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-sky-50 p-2">
+                      <p className="text-[10px] font-medium uppercase text-sky-700">
+                        Profit
+                      </p>
+                      <p className="truncate text-xs font-bold text-sky-950">
+                        {dashboardMoney(plantationSummary.profit?.net_profit)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-amber-50 p-2">
+                      <p className="text-[10px] font-medium uppercase text-amber-700">
+                        ROI
+                      </p>
+                      <p className="truncate text-xs font-bold text-amber-950">
+                        {dashboardNumber(plantationSummary.profit?.roi_percent).toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })}
+                        %
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </section>
 
         {/* Recent Activity */}

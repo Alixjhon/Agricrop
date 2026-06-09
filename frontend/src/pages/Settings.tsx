@@ -23,6 +23,10 @@ import {
   ArrowLeft,
   Send,
   FileText,
+  BarChart3,
+  CircleDollarSign,
+  TrendingUp,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +34,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api } from "@/lib/api";
+import type { HarvestSummary, Plantation } from "@/types/planting";
 const SETTINGS_STORAGE_KEY = "cropwise_settings";
 
 type ActivePanel = "notifications" | "appearance" | "privacy" | "help" | null;
@@ -119,6 +131,33 @@ function getPanelSummary(panel: ActivePanel, settings: SettingsPreferences) {
   }
 }
 
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatNumber(value: string | number | null | undefined): string {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return "0";
+  return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function formatCurrency(value: string | number | null | undefined): string {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return "$0";
+  return numeric.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+}
+
 export default function Settings() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -151,6 +190,10 @@ export default function Settings() {
     aiConversations: 0,
   });
   const [statsLoading, setStatsLoading] = useState(true);
+  const [plantations, setPlantations] = useState<Plantation[]>([]);
+  const [selectedPlantationId, setSelectedPlantationId] = useState("");
+  const [analyticsSummary, setAnalyticsSummary] = useState<HarvestSummary | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   const activePath = useMemo(() => {
     const params = new URLSearchParams();
@@ -206,9 +249,10 @@ export default function Settings() {
           token ? api.getProfile(token) : Promise.resolve(null),
           api.getStats(),
           api.getHistory(),
+          api.listPlantations(),
         ]);
 
-        const [profileResult, statsResult, historyResult] = requests;
+        const [profileResult, statsResult, historyResult, plantationsResult] = requests;
 
         if (profileResult.status === "fulfilled" && profileResult.value?.user) {
           const normalizedUser = normalizeUser(profileResult.value.user as LocalUser);
@@ -244,6 +288,14 @@ export default function Settings() {
             daysActive,
           });
         }
+
+        if (plantationsResult.status === "fulfilled") {
+          const nextPlantations = (plantationsResult.value.plantations || []) as Plantation[];
+          setPlantations(nextPlantations);
+          setSelectedPlantationId((current) =>
+            current || (nextPlantations[0] ? String(nextPlantations[0].id) : ""),
+          );
+        }
       } catch (error) {
         console.error("Failed to load settings data:", error);
       } finally {
@@ -253,6 +305,43 @@ export default function Settings() {
 
     void loadSettingsData();
   }, []);
+
+  useEffect(() => {
+    if (!selectedPlantationId) {
+      setAnalyticsSummary(null);
+      setAnalyticsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAnalyticsLoading(true);
+
+    (async () => {
+      try {
+        const response = await api.getHarvestSummary(selectedPlantationId);
+        if (!cancelled) setAnalyticsSummary(response.summary);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load farm analytics:", error);
+          setAnalyticsSummary(null);
+        }
+      } finally {
+        if (!cancelled) setAnalyticsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlantationId]);
+
+  const selectedPlantation = useMemo(
+    () =>
+      plantations.find(
+        (plantation) => String(plantation.id) === String(selectedPlantationId),
+      ) ?? null,
+    [plantations, selectedPlantationId],
+  );
 
   // Handler functions for each button
   const handleBack = () => {
@@ -634,6 +723,148 @@ export default function Settings() {
               </div>
               <p className="text-2xl font-bold text-foreground">{stats.aiConversations}</p>
               <p className="text-xs text-muted-foreground">AI Chats</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13 }}
+          className="mb-4"
+        >
+          <Card className="overflow-hidden border-0 shadow-lg">
+            <CardHeader className="border-b border-border/60 bg-white/80 pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardDescription className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-emerald-600" />
+                  <span className="font-semibold text-foreground">My Farm Analytics</span>
+                </CardDescription>
+                <div className="w-full sm:w-72">
+                  <Select
+                    value={selectedPlantationId}
+                    onValueChange={setSelectedPlantationId}
+                    disabled={plantations.length === 0}
+                  >
+                    <SelectTrigger className="h-10 bg-background">
+                      <SelectValue placeholder="Choose plantation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {plantations.map((plantation) => (
+                        <SelectItem
+                          key={String(plantation.id)}
+                          value={String(plantation.id)}
+                        >
+                          {plantation.farm?.farm_name || "Farm"} - {plantation.crop_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4">
+              {plantations.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/60 p-4 text-sm text-emerald-800">
+                  No plantations found yet. Create a plantation first, then your
+                  postharvest yield and profit analytics will appear here.
+                </div>
+              ) : analyticsLoading ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="h-24 animate-pulse rounded-2xl bg-slate-100"
+                    />
+                  ))}
+                </div>
+              ) : analyticsSummary ? (
+                <>
+                  <div className="flex flex-col gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-950">
+                        {analyticsSummary.farm_name || selectedPlantation?.farm?.farm_name || "Farm"}
+                      </p>
+                      <p className="text-xs text-emerald-800/80">
+                        {analyticsSummary.crop_name} plantation - status:{" "}
+                        {analyticsSummary.status || selectedPlantation?.status || "active"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        navigate(
+                          `/plantation/${selectedPlantationId}/postharvest/summary`,
+                        )
+                      }
+                      className="w-full border-emerald-200 bg-white/70 sm:w-auto"
+                    >
+                      View postharvest
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <AnalyticsTile
+                      icon={Sprout}
+                      label="Actual Yield"
+                      value={
+                        analyticsSummary.harvest
+                          ? `${formatNumber(analyticsSummary.harvest.actual_yield)} ${analyticsSummary.harvest.yield_unit}`
+                          : "Not recorded"
+                      }
+                      tone="emerald"
+                    />
+                    <AnalyticsTile
+                      icon={CircleDollarSign}
+                      label="Revenue"
+                      value={formatCurrency(analyticsSummary.profit?.total_revenue)}
+                      tone="cyan"
+                    />
+                    <AnalyticsTile
+                      icon={TrendingUp}
+                      label="Net Profit"
+                      value={formatCurrency(analyticsSummary.profit?.net_profit)}
+                      tone="amber"
+                    />
+                    <AnalyticsTile
+                      icon={Award}
+                      label="ROI"
+                      value={
+                        analyticsSummary.profit
+                          ? `${formatNumber(analyticsSummary.profit.roi_percent)}%`
+                          : "0%"
+                      }
+                      tone="violet"
+                    />
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <AnalyticsDetail
+                      label="Harvest date"
+                      value={formatDate(analyticsSummary.actual_harvest_date)}
+                    />
+                    <AnalyticsDetail
+                      label="Expected harvest"
+                      value={formatDate(analyticsSummary.expected_harvest_date)}
+                    />
+                    <AnalyticsDetail
+                      label="Total expenses"
+                      value={formatCurrency(analyticsSummary.profit?.total_expenses)}
+                    />
+                    <AnalyticsDetail
+                      label="Activities done"
+                      value={`${analyticsSummary.activities.completed}/${analyticsSummary.activities.total}`}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-800">
+                  Analytics could not be loaded for this plantation. Make sure
+                  postharvest data is available, then try again.
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1089,6 +1320,48 @@ export default function Settings() {
           CropWise AI v1.0 • Built with ❤️ for Farmers
         </p>
       </div>
+    </div>
+  );
+}
+
+const analyticsToneClasses: Record<string, string> = {
+  emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+  cyan: "border-cyan-100 bg-cyan-50 text-cyan-700",
+  amber: "border-amber-100 bg-amber-50 text-amber-700",
+  violet: "border-violet-100 bg-violet-50 text-violet-700",
+};
+
+function AnalyticsTile({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  tone: keyof typeof analyticsToneClasses;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div
+        className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${analyticsToneClasses[tone]}`}
+      >
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-lg font-bold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function AnalyticsDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
 }

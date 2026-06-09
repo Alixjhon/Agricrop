@@ -3,12 +3,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import db, { testConnection } from './models/db';
+import { ensurePlantationSchema } from './models/ensurePlantationSchema';
 import { cropRoutes } from './routes/cropRoutes';
 import { diseaseRoutes } from './routes/diseaseRoutes';
 import { chatRoutes } from './routes/chatRoutes';
 import { historyRoutes } from './routes/historyRoutes';
 import { authRoutes } from './routes/authRoutes';
 import { locationRoutes } from './routes/locationRoutes';
+import { plantationRoutes } from './routes/plantationRoutes';
 
 dotenv.config();
 
@@ -115,6 +117,7 @@ app.use('/api', chatRoutes);
 app.use('/api', historyRoutes);
 app.use('/api', authRoutes);
 app.use('/api', locationRoutes);
+app.use('/api', plantationRoutes);
 
 app.use(
   (
@@ -143,6 +146,16 @@ const startServer = async () => {
     const connected = await testConnection();
     if (connected) {
       console.log('Database connected successfully using PostgreSQL');
+      // Make sure the new plantation columns exist (idempotent).
+      try {
+        await ensurePlantationSchema();
+        console.log('Plantation schema verified.');
+      } catch (error) {
+        console.warn(
+          'ensurePlantationSchema failed:',
+          error instanceof Error ? error.message : error,
+        );
+      }
     } else {
       console.warn('Database connection test failed.');
       console.warn('Check your DATABASE_URL environment variable.');

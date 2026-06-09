@@ -17,7 +17,8 @@ import {
   Thermometer,
   Shovel,
   CheckCircle2,
-  Info
+  Info,
+  MapPinned
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ import {
   type Store,
   type UserLocation
 } from "@/lib/storeLocator";
+import PlantingWorkspace from "@/components/planting/PlantingWorkspace";
+import type { Plantation } from "@/types/planting";
 import "./CropDetail.css";
 
 interface CropDetailLocationState {
@@ -43,6 +46,8 @@ interface CropDetailLocationState {
   careTips?: string;
   imageUrl?: string;
   imageAlt?: string;
+  openPlanting?: boolean;
+  recommendationId?: string;
 }
 
 export default function CropDetail() {
@@ -57,7 +62,28 @@ export default function CropDetail() {
   const [guideError, setGuideError] = useState<string | null>(null);
   const [loadingStores, setLoadingStores] = useState(true);
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
-  const [activeTab, setActiveTab] = useState<"guide" | "stores">("guide");
+  const [activeTab, setActiveTab] = useState<"guide" | "stores" | "planting">("guide");
+  const [plantation, setPlantation] = useState<Plantation | null>(null);
+  const [startingPlanting, setStartingPlanting] = useState(false);
+  const [recommendationId, setRecommendationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = new URLSearchParams(window.location.search);
+    const tab = search.get("tab");
+    if (tab === "planting") setActiveTab("planting");
+    const recId = search.get("recommendationId");
+    if (recId) setRecommendationId(recId);
+  }, []);
+
+  useEffect(() => {
+    if (cropData?.openPlanting) {
+      setActiveTab("planting");
+    }
+    if (cropData?.recommendationId) {
+      setRecommendationId(cropData.recommendationId);
+    }
+  }, [cropData?.openPlanting, cropData?.recommendationId]);
 
   useEffect(() => {
     if (!cropData?.cropName) {
@@ -225,10 +251,52 @@ export default function CropDetail() {
               )}
             </span>
           </button>
+          <button
+            onClick={() => setActiveTab("planting")}
+            className={cn(
+              "flex-1 rounded-lg py-2.5 text-sm font-medium transition-all",
+              activeTab === "planting"
+                ? "bg-card text-primary shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span className="flex items-center justify-center gap-2">
+              <MapPinned className="h-4 w-4" />
+              Plant
+            </span>
+          </button>
         </div>
 
         {activeTab === "guide" ? (
           <div className="space-y-4">
+            {/* Start Planting Call-to-Action */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-5 text-white shadow-xl"
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-white/20 p-2">
+                  <MapPinned className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-base font-bold">Ready to grow {guide.cropName}?</h2>
+                  <p className="mt-1 text-sm text-white/85">
+                    Map your farm on a satellite layer, request GPS, draw the boundary, and we will
+                    generate a weather-aware calendar and cost estimate for you.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => setActiveTab("planting")}
+                className="mt-4 w-full rounded-xl bg-white text-emerald-700 hover:bg-white/90"
+                size="lg"
+              >
+                <MapPinned className="mr-2 h-5 w-5" />
+                Start planting — Request GPS location
+              </Button>
+            </motion.div>
+
             {/* Overview Card */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
@@ -382,7 +450,7 @@ export default function CropDetail() {
               </ul>
             </motion.div>
           </div>
-        ) : (
+        ) : activeTab === "stores" ? (
           <div className="space-y-4">
             {/* Location Info */}
             {userLocation && (
@@ -528,7 +596,68 @@ export default function CropDetail() {
               </div>
             </motion.div>
           </div>
-        )}
+        ) : activeTab === "planting" ? (
+          <div className="space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl bg-card p-4 card-shadow"
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-primary/10 p-2">
+                  <MapPinned className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-base font-bold text-card-foreground">
+                    Plant {guide.cropName} on your farm
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Request GPS to center the satellite map on your farm, draw the boundary, and
+                    we will save the GeoJSON plus a weather-aware smart calendar.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {plantation ? (
+              <div className="space-y-4">
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900"
+                >
+                  <p className="font-semibold">Plantation created for {plantation.crop_name}.</p>
+                  <p className="mt-1 text-xs">
+                    Farm area: {plantation.farm?.area_hectares ?? "-"} ha. View the dashboard for the
+                    full smart calendar and cost summary.
+                  </p>
+                </motion.div>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => navigate("/plantation")}
+                  >
+                    Go to my plantation
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPlantation(null);
+                    }}
+                  >
+                    Start another
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <PlantingWorkspace
+                cropName={guide.cropName}
+                recommendationId={recommendationId}
+                onCreated={(created) => setPlantation(created)}
+              />
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );

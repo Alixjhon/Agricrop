@@ -1,0 +1,69 @@
+.plantation-page {
+  /* Container for the dedicated My Plantation page */
+}
+
+.plantation-empty {
+  position: relative;
+  margin: 0 auto;
+  max-width: 32rem;
+  border-radius: 1.5rem;
+  border: 1px dashed rgb(167 243 208);
+  background: linear-gradient(160deg, rgba(236, 253, 245, 0.95), rgba(255, 255, 255, 0.95));
+  padding: 2.5rem 1.5rem 2rem;
+  text-align: center;
+  box-shadow: 0 10px 30px -20px rgba(6, 95, 70, 0.35);
+}
+
+.plantation-empty-illustration {
+  position: relative;
+  margin: 0 auto 1.25rem;
+  height: 7rem;
+  width: 7rem;
+}
+
+.plantation-empty-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #10b981, #0ea5e9);
+  color: white;
+  box-shadow: 0 12px 30px -10px rgba(16, 185, 129, 0.6);
+}
+
+.plantation-empty-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.25);
+  animation: plantation-pulse 2.4s ease-out infinite;
+}
+
+@keyframes plantation-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  70% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.plantation-empty-stats {
+  margin-top: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  border-top: 1px dashed rgb(167 243 208);
+  padding-top: 1rem;
+  text-align: center;
+}

@@ -111,8 +111,107 @@ const createTables = async () => {
       )
     `);
 
+    // Plantation tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS farms (
+        id SERIAL PRIMARY KEY,
+        userid INTEGER REFERENCES users(id),
+        farm_name VARCHAR(255) NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL,
+        area_sqm DOUBLE PRECISION NOT NULL,
+        area_hectares DOUBLE PRECISION NOT NULL,
+        polygon_geojson JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS plantations (
+        id SERIAL PRIMARY KEY,
+        farm_id INTEGER REFERENCES farms(id),
+        recommendation_id VARCHAR(64),
+        crop_name VARCHAR(255) NOT NULL,
+        planting_date DATE NOT NULL,
+        expected_harvest_date DATE NOT NULL,
+        status VARCHAR(50) DEFAULT 'active',
+        progress_percent INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS calendar_events (
+        id SERIAL PRIMARY KEY,
+        plantation_id INTEGER REFERENCES plantations(id),
+        event_type VARCHAR(120) NOT NULL,
+        scheduled_date DATE NOT NULL,
+        adjusted_date DATE,
+        status VARCHAR(50) DEFAULT 'scheduled',
+        adjustment_reason TEXT,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS farm_costs (
+        id SERIAL PRIMARY KEY,
+        plantation_id INTEGER REFERENCES plantations(id),
+        seed_cost NUMERIC DEFAULT 0,
+        fertilizer_cost NUMERIC DEFAULT 0,
+        labor_cost NUMERIC DEFAULT 0,
+        irrigation_cost NUMERIC DEFAULT 0,
+        total_cost NUMERIC DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Ensure plantation_id is unique so we can UPSERT cost rows.
+    await pool.query(
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint
+           WHERE conname = 'farm_costs_plantation_id_key'
+         ) THEN
+           ALTER TABLE farm_costs
+             ADD CONSTRAINT farm_costs_plantation_id_key UNIQUE (plantation_id);
+         END IF;
+       END $$;`
+    );
+
+    // Calendar event enhancement columns
+    await pool.query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS completed_at DATE`);
+    await pool.query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS skipped_at DATE`);
+    await pool.query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS rescheduled_to DATE`);
+    await pool.query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS reschedule_reason TEXT`);
+
+    // Per-activity cost entries so users can log real spend as they complete tasks
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS calendar_event_costs (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER REFERENCES calendar_events(id) ON DELETE CASCADE,
+        plantation_id INTEGER REFERENCES plantations(id) ON DELETE CASCADE,
+        category VARCHAR(40) NOT NULL DEFAULT 'other',
+        amount NUMERIC NOT NULL DEFAULT 0,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cec_event ON calendar_event_costs(event_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cec_plantation ON calendar_event_costs(plantation_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_cec_category ON calendar_event_costs(category)`);
+
+    // Indexes for plantations
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_farms_userid ON farms(userid)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_plantations_farm ON plantations(farm_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_calendar_events_plantation ON calendar_events(plantation_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_calendar_events_status ON calendar_events(status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_farm_costs_plantation ON farm_costs(plantation_id)`);
+
     console.log('✅ Database tables created successfully!');
-    console.log('📋 Tables created: users, conversations, chatMessages, crop_recommendations, disease_detections, chat_history');
+    console.log('📋 Tables created: users, conversations, chatMessages, crop_recommendations, disease_detections, chat_history, farms, plantations, calendar_events, farm_costs');
   } catch (error) {
     console.error('❌ Error creating tables:', error);
     throw error;

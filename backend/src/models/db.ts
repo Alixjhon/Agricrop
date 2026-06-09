@@ -101,9 +101,18 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+// Minimal client interface returned by db.connect(). Matches the shape of
+// pg's PoolClient that we actually use: query + release. Transaction
+// control is done by the caller via SQL statements.
+export interface DatabaseClient {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
+  release(): void;
+}
+
 // Interface for the database wrapper
 export interface DatabaseWrapper {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
+  connect(): Promise<DatabaseClient>;
   readonly totalCount: number | null;
   readonly idleCount: number | null;
   readonly waitingCount: number | null;
@@ -129,18 +138,31 @@ export const db: DatabaseWrapper = {
       client.release();
     }
   },
-  
+
+  async connect() {
+    const client = await pool.connect();
+    return {
+      async query(sql: string, params: unknown[] = []) {
+        const result = await client.query(sql, params);
+        return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+      },
+      release() {
+        client.release();
+      },
+    };
+  },
+
   get totalCount() { return pool.totalCount; },
   get idleCount() { return pool.idleCount; },
   get waitingCount() { return pool.waitingCount; },
-  
+
   on: (event: string, listener: (...args: unknown[]) => void) => {
     return pool.on(event as 'error' | 'release' | 'connect' | 'acquire' | 'remove', listener);
   },
-  
+
   isUsingSQLite: () => false,
   isUsingPostgreSQL: () => true,
-  
+
   async end() {
     return pool.end();
   }

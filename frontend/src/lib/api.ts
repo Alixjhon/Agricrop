@@ -64,7 +64,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const token = getAuthToken();
 
   const url = buildApiUrl(endpoint);
-  
+
   const res = await fetch(url, {
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
@@ -300,11 +300,11 @@ export const api = {
     request<DiseaseResult[]>("/disease-detection"),
 
   submitImage: (formData: FormData) =>
-    request<{ 
-      disease_detection: DiseaseResult[]; 
+    request<{
+      disease_detection: DiseaseResult[];
       images_analyzed?: number;
       enhanced?: boolean;
-      saved_result?: unknown 
+      saved_result?: unknown
     }>(
       "/disease-detection",
       {
@@ -350,5 +350,147 @@ export const api = {
   deleteDiseaseDetection: (id: string) =>
     request<{ success: boolean; message: string }>(`/history/disease/${id}`, {
       method: "DELETE",
+    }),
+
+  // Plantations
+  listPlantations: () =>
+    request<{ plantations: unknown[] }>("/plantations"),
+
+  getPlantation: (id: string) =>
+    request<{ plantation: unknown }>(`/plantations/${id}`),
+
+  createPlantation: (payload: unknown) =>
+    request<unknown>("/plantations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  markCalendarEventDone: (eventId: string) =>
+    request<{ event: unknown }>(`/plantations/calendar/${eventId}/done`, {
+      method: "PATCH",
+    }),
+
+  skipCalendarEvent: (eventId: string) =>
+    request<{ event: unknown }>(`/plantations/calendar/${eventId}/skip`, {
+      method: "PATCH",
+    }),
+
+  rescheduleCalendarEvent: (
+    eventId: string,
+    payload: { newDate: string; reason: string | null },
+  ) =>
+    request<{ event: unknown }>(`/plantations/calendar/${eventId}/reschedule`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  addEventCosts: (
+    eventId: string,
+    payload: { seed_cost: number; fertilizer_cost: number; labor_cost: number; irrigation_cost: number },
+  ) =>
+    request<{ costs: unknown }>(`/plantations/calendar/${eventId}/costs`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getCostProfile: (cropName: string) =>
+    request<{
+      cropName: string;
+      profile: { seedCostPerHa: number; fertilizerCostPerHa: number; laborCostPerHa: number; irrigationCostPerHa: number };
+    }>(`/plantations/cost-profile?cropName=${encodeURIComponent(cropName)}`),
+
+  updateCostRates: (
+    plantationId: string,
+    payload: { seedCostPerHa: number; fertilizerCostPerHa: number; laborCostPerHa: number; irrigationCostPerHa: number },
+  ) =>
+    request<{ costs: unknown }>(`/plantations/${plantationId}/cost-rates`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  // ----- Post-harvest workflow -----
+
+  getHarvestSummary: (plantationId: string) =>
+    request<{ summary: import("@/types/planting").HarvestSummary }>(
+      `/plantations/${plantationId}/summary`,
+    ),
+
+  getHarvest: (plantationId: string) =>
+    request<{ record: import("@/types/planting").HarvestRecord | null }>(
+      `/plantations/${plantationId}/harvest`,
+    ),
+
+  recordHarvest: (
+    plantationId: string,
+    payload: {
+      actualHarvestDate: string;
+      actualYield: number;
+      yieldUnit: string;
+      notes?: string | null;
+    },
+  ) =>
+    request<{ record: import("@/types/planting").HarvestRecord }>(
+      `/plantations/${plantationId}/harvest`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+
+  getProfit: (plantationId: string) =>
+    request<{ record: import("@/types/planting").ProfitRecord | null }>(
+      `/plantations/${plantationId}/profit`,
+    ),
+
+  recordProfit: (
+    plantationId: string,
+    payload: { sellingPricePerUnit: number; yieldUnit: string },
+  ) =>
+    request<{ record: import("@/types/planting").ProfitRecord }>(
+      `/plantations/${plantationId}/profit`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+
+  getRotationRecommendations: (plantationId: string) =>
+    request<{
+      previous_crop: string;
+      recommendations: import("@/types/planting").RotationRecommendation[];
+    }>(`/plantations/${plantationId}/rotation`),
+
+  archivePlantation: (plantationId: string) =>
+    request<{ status: string; archivedAt: string }>(
+      `/plantations/${plantationId}/archive`,
+      { method: "PATCH" },
+    ),
+
+  getFarmHistory: (farmId: string) =>
+    request<{ history: import("@/types/planting").FarmHistoryEntry[] }>(
+      `/farms/${farmId}/history`,
+    ),
+
+  startNewPlantationCycle: (
+    farmId: string,
+    payload: import("@/types/planting").NewPlantationCycleInput,
+  ) =>
+    request<unknown>(`/farms/${farmId}/new-plantation`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  /**
+   * Re-checks whether every Smart Calendar event on a plantation is in a
+   * terminal state and, if so, promotes the plantation to `harvested` on
+   * the server. Returns the new status and the number of remaining open
+   * events (0 when promoted).
+   *
+   * The backend already auto-promotes on every calendar-event mutation,
+   * but the frontend calls this as a safety net after a batch of changes
+   * (e.g. after the cost dialog closes) to make sure the UI reflects the
+   * server state.
+   */
+  finalizePlantationIfAllDone: (plantationId: string) =>
+    request<{
+      status: string;
+      remaining: number;
+      promoted: boolean;
+    }>(`/plantations/${plantationId}/finalize-if-all-done`, {
+      method: "POST",
     }),
 };

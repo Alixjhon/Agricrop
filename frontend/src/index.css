@@ -116,4 +116,10 @@
   .gradient-accent {
     background: var(--gradient-accent);
   }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }

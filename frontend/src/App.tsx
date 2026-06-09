@@ -16,7 +16,28 @@ import History from "./pages/History";
 import Settings from "./pages/Settings";
 import CropDetail from "./pages/CropDetail";
 import Profile from "./pages/Profile";
+import Plantation from "./pages/Plantation";
+import HarvestSummaryPage from "./pages/postharvest/HarvestSummaryPage";
+import YieldPage from "./pages/postharvest/YieldPage";
+import ProfitPage from "./pages/postharvest/ProfitPage";
+import RotationPage from "./pages/postharvest/RotationPage";
+import ArchivePage from "./pages/postharvest/ArchivePage";
+import FarmHistoryPage from "./pages/postharvest/FarmHistoryPage";
+import NewPlantationPage from "./pages/postharvest/NewPlantationPage";
+import FarmAnalyticsComparisonPage from "./pages/FarmAnalyticsComparisonPage";
 import NotFound from "./pages/NotFound";
+import { Navigate, useParams } from "react-router-dom";
+
+/**
+ * Redirects /plantation/:id/postharvest to the first step in the
+ * guided post-harvest flow. We use Navigate with `replace` so the
+ * browser back button doesn't bounce through the old URL.
+ */
+function PostHarvestRedirect() {
+  const params = useParams<{ plantationId: string }>();
+  const id = params.plantationId ?? "";
+  return <Navigate to={`/plantation/${id}/postharvest/summary`} replace />;
+}
 
 const queryClient = new QueryClient();
 
@@ -128,6 +149,83 @@ const App = () => (
               <ProtectedRoute>
                 <>
                   <CropDetail />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation" element={
+              <ProtectedRoute>
+                <>
+                  <Plantation />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest" element={
+              <ProtectedRoute>
+                <PostHarvestRedirect />
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/summary" element={
+              <ProtectedRoute>
+                <>
+                  <HarvestSummaryPage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/yield" element={
+              <ProtectedRoute>
+                <>
+                  <YieldPage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/profit" element={
+              <ProtectedRoute>
+                <>
+                  <ProfitPage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/rotation" element={
+              <ProtectedRoute>
+                <>
+                  <RotationPage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/archive" element={
+              <ProtectedRoute>
+                <>
+                  <ArchivePage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/history" element={
+              <ProtectedRoute>
+                <>
+                  <FarmHistoryPage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/plantation/:plantationId/postharvest/new-plantation" element={
+              <ProtectedRoute>
+                <>
+                  <NewPlantationPage />
+                  <BottomNav />
+                </>
+              </ProtectedRoute>
+            } />
+            <Route path="/farm-analytics-comparison" element={
+              <ProtectedRoute>
+                <>
+                  <FarmAnalyticsComparisonPage />
                   <BottomNav />
                 </>
               </ProtectedRoute>

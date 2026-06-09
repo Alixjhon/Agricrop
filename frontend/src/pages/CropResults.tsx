@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Sprout, Calendar, Lightbulb, ChevronRight } from "lucide-react";
+import { Sprout, Calendar, Lightbulb, ChevronRight, MapPinned } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -122,11 +122,32 @@ export default function CropResults() {
                 </div>
               </div>
 
-              {/* Bottom hint */}
-              <div className="border-t border-border bg-muted/30 px-4 py-2">
-                <p className="text-center text-[10px] text-muted-foreground">
+              {/* Bottom hint + Start Planting shortcut */}
+              <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-4 py-2">
+                <p className="flex-1 text-[10px] text-muted-foreground">
                   Tap for detailed farming guide and nearby stores
                 </p>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate("/crop-detail", {
+                      state: {
+                        cropName: crop.crop_name,
+                        reason: crop.reason,
+                        plantingMonth: crop.planting_month,
+                        careTips: crop.care_tips,
+                        imageUrl,
+                        imageAlt,
+                        openPlanting: true,
+                      },
+                    });
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700"
+                >
+                  <MapPinned className="h-3 w-3" />
+                  Start planting
+                </button>
               </div>
             </motion.div>
           );
