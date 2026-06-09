@@ -7,10 +7,10 @@
     "node": ">=20.0.0 <22.0.0"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "npx tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "db:migrate": "tsx src/scripts/migrate.ts"
+    "db:migrate": "npx tsx src/scripts/migrate.ts"
   },
   "dependencies": {
     "@aws-sdk/client-rekognition": "^3.821.0",
