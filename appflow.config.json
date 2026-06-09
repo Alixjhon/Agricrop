@@ -1,13 +1,9 @@
 {
   "apps": {
-    "android": {
-      "capacitor": {
-        "buildOptions": {
-          "directory": "frontend"
-        }
-      }
-    },
-    "ios": {
+    "com.cropwise.app": {
+      "appId": "com.cropwise.app",
+      "name": "Cropwise",
+      "type": "capacitor",
       "capacitor": {
         "buildOptions": {
           "directory": "frontend"
