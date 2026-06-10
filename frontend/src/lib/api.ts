@@ -20,7 +20,7 @@ const configuredApiUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
 const isNativePlatform = Capacitor.isNativePlatform();
 const isAndroid = Capacitor.getPlatform() === 'android';
 
-const defaultNativeProdApiUrl = 'https://cropwise-backend-ihhh.onrender.com';
+const defaultNativeProdApiUrl = 'https://agricrop-backend-y7ml.onrender.com';
 
 // Use the configured URL if available, otherwise use relative path for nginx proxy
 // For Android builds, always use Render backend as requested.
@@ -28,7 +28,7 @@ const API_BASE = normalizeApiBaseUrl(
   isAndroid
     ? defaultNativeProdApiUrl
     : isDevelopment
-      ? (configuredApiUrl || "https://cropwise-backend-ihhh.onrender.com")
+    ? (configuredApiUrl || "https://agricrop-backend-y7ml.onrender.com")
       : (configuredApiUrl || (isNativePlatform ? defaultNativeProdApiUrl : ""))
 );
 
